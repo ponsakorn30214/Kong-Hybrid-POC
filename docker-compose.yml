@@ -64,6 +64,7 @@ services:
       - KONG_CLUSTER_LISTEN=0.0.0.0:8005
       - KONG_CLUSTER_TELEMETRY_LISTEN=0.0.0.0:8006
         #- KONG_ENFORCE_RBAC=on
+      - KONG_PORTAL=on
     networks:
       - kong-net
     ports:
