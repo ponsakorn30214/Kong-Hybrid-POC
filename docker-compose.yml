@@ -1,0 +1,205 @@
+version: "3"
+
+services:
+
+  db:
+    image: postgres:12.9
+    container_name: postgres
+    environment:
+      - POSTGRES_USER=kong
+      - POSTGRES_DB=kong
+      - POSTGRES_PASSWORD=kong
+    networks:
+      - kong-net
+    ports:
+      - 5432:5432
+    volumes:
+      - ./kong_database:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready", "-d", "kong"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 1m
+
+  kong-migrations:
+    image: kong/kong-gateway:2.8.1.3
+    container_name: kong-migrations
+    environment:
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=db
+      - KONG_PG_PASSWORD=kong
+    networks:
+      - kong-net
+    restart: on-failure
+    command: kong migrations bootstrap
+    depends_on:
+      - db
+
+  kong-gateway-cp:
+    image: kong/kong-gateway:2.8.1.3
+    container_name: kong-gateway-CP
+    environment:
+      - KONG_DATABASE=postgres
+      - KONG_PG_HOST=db 
+      - KONG_PG_PORT=5432
+      - KONG_PG_DATABASE=kong
+      - KONG_PG_USER=kong
+      - KONG_PG_PASSWORD=kong
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stdout
+      - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_ERROR_LOG=/dev/stdout
+      - KONG_ADMIN_GUI_ACCESS_LOG=/dev/stdout
+      - KONG_ADMIN_GUI_ERROR_LOG=/dev/stdout
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001, 0.0.0.0:8444 ssl
+      - KONG_ADMIN_GUI_LISTEN=0.0.0.0:8002, 0.0.0.0:8445 ssl
+      - KONG_ADMIN_GUI_URL=https://13.214.39.198:8445
+      - KONG_STATUS_LISTEN=0.0.0.0:8100 ssl
+        #- KONG_STATUS_SSL_CERT=/certs/server.crt
+        #- KONG_STATUS_SSL_CERT_KEY=/certs/server.key
+      - KONG_ROLE=control_plane
+      - KONG_CLUSTER_CERT=/keys/cluster.crt
+      - KONG_CLUSTER_CERT_KEY=/keys/cluster.key
+      - KONG_CLUSTER_LISTEN=0.0.0.0:8005
+      - KONG_CLUSTER_TELEMETRY_LISTEN=0.0.0.0:8006
+        #- KONG_ENFORCE_RBAC=on
+    networks:
+      - kong-net
+    ports:
+      - 8001:8001
+      - 8002:8002
+      - 8005:8005
+      - 8006:8006
+      - 8444:8444
+      - 8445:8445
+      - 8100:8100
+    volumes:
+      - ./keys:/keys/
+      - ./certs:/certs/
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - kong-migrations
+
+  kong-gateway-dp1:
+    image: kong/kong-gateway:2.8.1.3
+    container_name: kong-gateway-DP1
+    environment:
+      - KONG_DATABASE=off
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stdout
+      - KONG_PROXY_LISTEN=0.0.0.0:8443 ssl
+      - KONG_STATUS_LISTEN=0.0.0.0:8100 ssl
+        #- KONG_STATUS_SSL_CERT=/certs/server.crt
+        #- KONG_STATUS_SSL_CERT_KEY=/certs/server.key
+      - KONG_ROLE=data_plane
+      - KONG_CLUSTER_CERT=/keys/cluster.crt
+      - KONG_CLUSTER_CERT_KEY=/keys/cluster.key
+      - KONG_CLUSTER_CONTROL_PLANE=kong-gateway-cp:8005
+      - KONG_CLUSTER_TELEMETRY_ENDPOINT=kong-gateway-cp:8006
+    networks:
+      - kong-net
+    ports:
+      - 18443:8443
+      - 18100:8100
+    volumes:
+      - ./keys:/keys/
+      - ./certs:/certs/
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - kong-gateway-cp
+  
+  kong-gateway-dp2:
+    image: kong/kong-gateway:2.8.1.3
+    container_name: kong-gateway-DP2
+    environment:
+      - KONG_DATABASE=off
+      - KONG_PROXY_ACCESS_LOG=/dev/stdout
+      - KONG_PROXY_ERROR_LOG=/dev/stdout
+      - KONG_PROXY_LISTEN=0.0.0.0:8443 ssl
+      - KONG_STATUS_LISTEN=0.0.0.0:8100 ssl
+        #- KONG_STATUS_SSL_CERT=/certs/server.crt
+        #- KONG_STATUS_SSL_CERT_KEY=/certs/server.key
+      - KONG_ROLE=data_plane
+      - KONG_CLUSTER_CERT=/keys/cluster.crt
+      - KONG_CLUSTER_CERT_KEY=/keys/cluster.key
+      - KONG_CLUSTER_CONTROL_PLANE=kong-gateway-cp:8005
+      - KONG_CLUSTER_TELEMETRY_ENDPOINT=kong-gateway-cp:8006
+    networks:
+      - kong-net
+    ports:
+      - 28443:8443
+      - 28100:8100
+    volumes:
+      - ./keys:/keys/
+      - ./certs:/certs/
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - kong-gateway-cp
+
+
+  # kong-gateway-DP2:
+  #   image: kong:2.8.0
+  #   container_name: kong-gateway-DP2
+  #   environment:
+  #     - KONG_DATABASE=off
+  #     - KONG_PROXY_ACCESS_LOG=/dev/stdout
+  #     - KONG_PROXY_ERROR_LOG=/dev/stdout
+  #     - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+  #     - KONG_ADMIN_ERROR_LOG=/dev/stdout
+  #     - KONG_PROXY_LISTEN=0.0.0.0:8000, 0.0.0.0:8443 ssl
+  #     - KONG_STATUS_LISTEN=0.0.0.0:8100 ssl
+  #     - KONG_STATUS_SSL_CERT=/certs/server.crt
+  #     - KONG_STATUS_SSL_CERT_KEY=/certs/server.key
+  #   networks:
+  #     - kong-net
+  #   ports:
+  #     - 28000:8000
+  #     - 28443:8443
+  #     - 28100:8100
+  #     - 28125:8125
+  #   volumes:
+  #     - ./keys:/certs/
+  #   healthcheck:
+  #     test: ["CMD", "kong", "health"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3
+  #     start_period: 15s
+  #   depends_on:
+  #     - kong-migrations
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    networks:
+      - kong-net
+    ports:
+      - 8080:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    privileged: true
+
+networks:
+  kong-net:
+    name: kong-net
+    driver: bridge
+    external: true
